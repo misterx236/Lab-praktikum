@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "campus-planner",
+    "scheme": "campus-planner",
     "slug": "campus-planner",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,7 +23,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-router"
     ]
   }
 }
