@@ -1,130 +1,122 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useApp } from '../../src/context/AppContext';
+import Screen from '../../src/components/ui/Screen';
+import AppButton from '../../src/components/ui/AppButton';
+import EmptyState from '../../src/components/ui/EmptyState';
+import { useTasks } from '../../src/hooks/useTasks';
+import { useTheme } from '../../src/hooks/useTheme';
+import { TaskPriority } from '../../src/types/task';
+import { isOverdue } from '../../src/utils/task';
+import { radius, spacing } from '../../src/theme/spacing';
 
-export default function TaskDetailScreen() {
+const priorityLabel: Record<TaskPriority, string> = {
+  high: 'высокий',
+  medium: 'средний',
+  low: 'низкий',
+};
+
+export default function TaskDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { tasks, toggleTask, deleteTask, theme } = useApp();
-  const isDark = theme === 'dark';
-  const task = tasks.find((t) => t.id === id);
+  const { getTaskById, toggleTaskStatus, removeTask } = useTasks();
+  const { colors } = useTheme();
+  const task = getTaskById(id);
 
   if (!task) {
     return (
-      <View style={[styles.center, isDark && styles.darkBg]}>
-        <Text style={[styles.notFound, isDark && styles.lightText]}>
-          Задача не найдена
-        </Text>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backText}>Вернуться к списку</Text>
-        </Pressable>
-      </View>
+      <Screen>
+        <EmptyState
+          icon="❓"
+          title="Задача не найдена"
+          description="Возможно, она была удалена"
+          action={
+            <AppButton
+              title="К списку"
+              onPress={() => router.back()}
+              fullWidth={false}
+            />
+          }
+        />
+      </Screen>
     );
   }
 
+  const completed = task.status === 'completed';
+  const overdue = isOverdue(task);
+
   return (
-    <ScrollView
-      contentContainerStyle={[styles.container, isDark && styles.darkBg]}
-    >
-      <Text style={[styles.title, isDark && styles.lightText]}>
-        {task.title}
-      </Text>
-      <Text style={[styles.subject, isDark && styles.lightSubtext]}>
-        Предмет: {task.subject}
-      </Text>
-      <Text style={[styles.priority, isDark && styles.lightSubtext]}>
-        Приоритет: {task.priority}
-      </Text>
-      <Text style={[styles.status, isDark && styles.lightSubtext]}>
-        Статус: {task.isCompleted ? 'Выполнено' : 'Активно'}
-      </Text>
-
-      <Pressable
-        style={[styles.toggleBtn, isDark && styles.toggleBtnDark]}
-        onPress={() => toggleTask(task.id)}
+    <Screen scroll>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
       >
-        <Text style={[styles.toggleText, isDark && styles.toggleTextDark]}>
-          {task.isCompleted ? 'Вернуть в работу' : 'Отметить выполненной'}
+        <Text style={[styles.title, { color: colors.text }]}>
+          {task.title}
         </Text>
-      </Pressable>
-
-      <Pressable
-        style={styles.editBtn}
-        onPress={() =>
-          router.push({ pathname: '/task/edit/[id]', params: { id: task.id } })
-        }
-      >
-        <Text style={styles.editText}>Редактировать</Text>
-      </Pressable>
-
-      <Pressable
-        style={[styles.deleteBtn, isDark && styles.deleteBtnDark]}
-        onPress={() => {
-          deleteTask(task.id);
-          router.back();
-        }}
-      >
-        <Text style={[styles.deleteText, isDark && styles.deleteTextDark]}>
-          Удалить
+        <Text style={[styles.row, { color: colors.secondaryText }]}>
+          Предмет: {task.subject}
         </Text>
-      </Pressable>
-    </ScrollView>
+        <Text style={[styles.row, { color: colors.secondaryText }]}>
+          Приоритет: {priorityLabel[task.priority]}
+        </Text>
+        <Text style={[styles.row, { color: colors.secondaryText }]}>
+          Статус: {completed ? 'выполнена' : 'в работе'}
+        </Text>
+        <Text style={[styles.row, { color: colors.secondaryText }]}>
+          Создана: {new Date(task.createdAt).toLocaleString()}
+        </Text>
+        {task.dueDate ? (
+          <Text
+            style={[
+              styles.row,
+              { color: overdue ? colors.danger : colors.secondaryText },
+            ]}
+          >
+            Дедлайн: {new Date(task.dueDate).toLocaleString()}
+            {overdue ? ' (просрочена)' : ''}
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.actions}>
+        <AppButton
+          title={completed ? 'Вернуть в работу' : 'Отметить выполненной'}
+          variant={completed ? 'secondary' : 'primary'}
+          onPress={() => toggleTaskStatus(task.id)}
+        />
+        <AppButton
+          title="Редактировать"
+          variant="secondary"
+          onPress={() =>
+            router.push({
+              pathname: '/task/edit/[id]',
+              params: { id: task.id },
+            })
+          }
+        />
+        <AppButton
+          title="Удалить"
+          variant="danger"
+          onPress={() => {
+            removeTask(task.id);
+            router.back();
+          }}
+        />
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#f0f2f5',
+  card: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    marginBottom: spacing.md,
   },
-  darkBg: { backgroundColor: '#121212' },
-  notFound: { fontSize: 18, marginBottom: 16, color: '#212121' },
-  lightText: { color: '#ffffff' },
-  lightSubtext: { color: '#b0b0b0' },
-  backBtn: {
-    backgroundColor: '#1565c0',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  backText: { color: '#fff', fontWeight: '600' },
-  container: {
-    padding: 16,
-    backgroundColor: '#f0f2f5',
-    flexGrow: 1,
-  },
-  title: { fontSize: 24, fontWeight: '700', marginBottom: 12, color: '#212121' },
-  subject: { fontSize: 16, color: '#424242', marginBottom: 6 },
-  priority: { fontSize: 16, color: '#424242', marginBottom: 6 },
-  status: { fontSize: 16, color: '#424242', marginBottom: 20 },
-  toggleBtn: {
-    backgroundColor: '#e3f2fd',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  toggleBtnDark: { backgroundColor: '#263238' },
-  toggleText: { color: '#1565c0', fontWeight: '600' },
-  toggleTextDark: { color: '#90caf9' },
-  editBtn: {
-    backgroundColor: '#1565c0',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  editText: { color: '#fff', fontWeight: '600' },
-  deleteBtn: {
-    backgroundColor: '#ffebee',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  deleteBtnDark: { backgroundColor: '#3a1f1f' },
-  deleteText: { color: '#c62828', fontWeight: '600' },
-  deleteTextDark: { color: '#ef9a9a' },
+  title: { fontSize: 20, fontWeight: '700', marginBottom: spacing.sm },
+  row: { fontSize: 15, marginBottom: spacing.xs },
+  actions: { gap: spacing.sm },
 });

@@ -1,75 +1,108 @@
-import React from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { useApp } from '../src/context/AppContext';
-import { TaskCard } from '../src/components/TaskCard';
+import Screen from '../src/components/ui/Screen';
+import AppButton from '../src/components/ui/AppButton';
+import AppInput from '../src/components/ui/AppInput';
+import EmptyState from '../src/components/ui/EmptyState';
+import TaskCard from '../src/components/task/TaskCard';
+import { useTasks } from '../src/hooks/useTasks';
+import { useTheme } from '../src/hooks/useTheme';
+import { filterTasks, getTaskStats, sortByPriority } from '../src/utils/task';
+import { spacing } from '../src/theme/spacing';
 
-export default function ListScreen() {
-  const { tasks, theme, toggleTask } = useApp();
-  const completedCount = tasks.filter((t) => t.isCompleted).length;
+export default function IndexScreen() {
+  const { tasks, toggleTaskStatus, removeTask } = useTasks();
+  const { colors } = useTheme();
+  const [query, setQuery] = useState('');
+
+  const stats = useMemo(() => getTaskStats(tasks), [tasks]);
+  const visible = useMemo(
+    () => sortByPriority(filterTasks(tasks, query)),
+    [tasks, query]
+  );
 
   return (
-    <View style={[styles.container, theme === 'dark' && styles.darkBg]}>
+    <Screen padded>
+      <View style={styles.header}>
+        <Text style={[styles.stats, { color: colors.secondaryText }]}>
+          Всего: {stats.total} · Активных: {stats.active} · Выполнено:{' '}
+          {stats.completed}
+        </Text>
+
+        <View style={styles.headerButtons}>
+          <AppButton
+            title="+ Добавить"
+            onPress={() => router.push('/task/new')}
+            fullWidth={false}
+            style={styles.addButton}
+          />
+          <AppButton
+            title="⚙ Настройки"
+            variant="secondary"
+            onPress={() => router.push('/settings')}
+            fullWidth={false}
+          />
+        </View>
+
+        <AppInput
+          placeholder="Поиск по названию или предмету"
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+        />
+      </View>
+
       <FlatList
-        data={tasks}
+        data={visible}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TaskCard
             task={item}
-            onPress={() =>
-              router.push({ pathname: '/task/[id]', params: { id: item.id } })
+            onPress={(id) =>
+              router.push({ pathname: '/task/[id]', params: { id } })
             }
-            onToggle={() => toggleTask(item.id)}
+            onToggle={toggleTaskStatus}
+            onDelete={removeTask}
           />
         )}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text style={[styles.title, theme === 'dark' && styles.lightText]}>
-              Campus Planner
-            </Text>
-            <Text style={[styles.stats, theme === 'dark' && styles.lightSubtext]}>
-              Всего: {tasks.length} · Выполнено: {completedCount}
-            </Text>
-            <View style={styles.actions}>
-              <Pressable
-                style={styles.addBtn}
-                onPress={() => router.push('/task/new')}
-              >
-                <Text style={styles.addText}>+ Новая задача</Text>
-              </Pressable>
-              <Pressable
-                style={styles.settingsBtn}
-                onPress={() => router.push('/settings')}
-              >
-                <Text style={styles.settingsText}>Настройки</Text>
-              </Pressable>
-            </View>
-          </View>
-        }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>Список пока пуст</Text>
-          </View>
+          query.trim() ? (
+            <EmptyState
+              icon="🔍"
+              title="Ничего не найдено"
+              description="Попробуйте изменить запрос"
+            />
+          ) : (
+            <EmptyState
+              icon="📚"
+              title="Список пока пуст"
+              description="Добавьте первую задачу"
+              action={
+                <AppButton
+                  title="Создать задачу"
+                  onPress={() => router.push('/task/new')}
+                  fullWidth={false}
+                />
+              }
+            />
+          )
         }
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f2f5' },
-  darkBg: { backgroundColor: '#121212' },
-  header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
-  title: { fontSize: 26, fontWeight: '800', color: '#1565c0' },
-  lightText: { color: '#90caf9' },
-  stats: { marginTop: 4, fontSize: 14, color: '#616161' },
-  lightSubtext: { color: '#b0b0b0' },
-  actions: { flexDirection: 'row', marginTop: 12, gap: 8 },
-  addBtn: { flex: 1, backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  addText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  settingsBtn: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: '#1565c0', alignItems: 'center' },
-  settingsText: { color: '#1565c0', fontWeight: '600' },
-  empty: { paddingTop: 40, alignItems: 'center' },
-  emptyText: { fontSize: 15, color: '#9e9e9e' },
+  header: { paddingBottom: spacing.sm },
+  stats: { fontSize: 14, marginBottom: spacing.sm },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  addButton: { flexGrow: 1 },
+  list: { paddingBottom: spacing.lg },
 });

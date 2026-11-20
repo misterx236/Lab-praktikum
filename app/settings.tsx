@@ -1,57 +1,61 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useApp } from '../src/context/AppContext';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Screen from '../src/components/ui/Screen';
+import { useTheme } from '../src/hooks/useTheme';
+import { radius, spacing } from '../src/theme/spacing';
 
 export default function SettingsScreen() {
-  const { theme, setTheme } = useApp();
-  const isDark = theme === 'dark';
+  const { theme, setTheme, colors } = useTheme();
 
   return (
-    <View style={[styles.container, isDark && styles.darkBg]}>
-      <Text style={[styles.heading, isDark && styles.lightText]}>
-        Настройки
-      </Text>
-      <Text style={[styles.label, isDark && styles.lightSubtext]}>
-        Тема оформления
+    <Screen padded>
+      <Text style={[styles.heading, { color: colors.text }]}>
+        Тема интерфейса
       </Text>
 
-      <Pressable
-        style={[styles.option, !isDark && styles.optionActive]}
-        onPress={() => setTheme('light')}
-      >
-        <Text style={[styles.optionText, !isDark && styles.optionTextActive]}>
-          Светлая
-        </Text>
-      </Pressable>
-
-      <Pressable
-        style={[styles.option, isDark && styles.optionActive]}
-        onPress={() => setTheme('dark')}
-      >
-        <Text style={[styles.optionText, isDark && styles.optionTextActive]}>
-          Тёмная
-        </Text>
-      </Pressable>
-    </View>
+      {(['light', 'dark'] as const).map((mode) => {
+        const active = theme === mode;
+        return (
+          <TouchableOpacity
+            key={mode}
+            style={[
+              styles.option,
+              {
+                backgroundColor: colors.card,
+                borderColor: active ? colors.primary : colors.border,
+                borderWidth: active ? 2 : 1,
+              },
+            ]}
+            onPress={() => setTheme(mode)}
+          >
+            <Text style={{ color: colors.text, fontSize: 16 }}>
+              {mode === 'light' ? '☀ Светлая' : '🌙 Тёмная'}
+            </Text>
+            {active ? (
+              <Text style={{ color: colors.primary, fontWeight: '700' }}>
+                ✓
+              </Text>
+            ) : null}
+          </TouchableOpacity>
+        );
+      })}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#f0f2f5' },
-  darkBg: { backgroundColor: '#121212' },
-  heading: { fontSize: 24, fontWeight: '700', marginBottom: 24, color: '#212121' },
-  lightText: { color: '#fff' },
-  label: { fontSize: 14, color: '#616161', marginBottom: 10 },
-  lightSubtext: { color: '#b0b0b0' },
-  option: {
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginBottom: 10,
-    backgroundColor: '#fff',
+  heading: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
   },
-  optionActive: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
-  optionText: { fontSize: 16, color: '#424242' },
-  optionTextActive: { color: '#fff', fontWeight: '600' },
+  option: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm + 4,
+  },
 });

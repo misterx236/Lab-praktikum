@@ -1,52 +1,53 @@
 import React from 'react';
-import { View, StyleSheet, Text } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useApp } from '../../../src/context/AppContext';
-import { TaskForm } from '../../../src/components/TaskForm';
+import Screen from '../../../src/components/ui/Screen';
+import EmptyState from '../../../src/components/ui/EmptyState';
+import AppButton from '../../../src/components/ui/AppButton';
+import TaskForm from '../../../src/components/task/TaskForm';
+import { useTasks } from '../../../src/hooks/useTasks';
+import { TaskPriority } from '../../../src/types/task';
 
 export default function EditTaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { tasks, updateTask, theme } = useApp();
-  const isDark = theme === 'dark';
-  const task = tasks.find((t) => t.id === id);
+  const { getTaskById, updateTask } = useTasks();
+  const task = getTaskById(id);
 
   if (!task) {
     return (
-      <View style={[styles.center, isDark && styles.darkBg]}>
-        <Text style={[styles.notFound, isDark && styles.lightText]}>
-          Задача не найдена
-        </Text>
-      </View>
+      <Screen>
+        <EmptyState
+          icon="❓"
+          title="Задача не найдена"
+          action={
+            <AppButton
+              title="Назад"
+              onPress={() => router.back()}
+              fullWidth={false}
+            />
+          }
+        />
+      </Screen>
     );
   }
 
+  const handleSubmit = (
+    title: string,
+    subject: string,
+    priority: TaskPriority
+  ) => {
+    updateTask(task.id, { title, subject, priority });
+    router.back();
+  };
+
   return (
-    <View style={[styles.container, isDark && styles.darkBg]}>
+    <Screen scroll>
       <TaskForm
-        mode="edit"
-        initialValues={{
-          title: task.title,
-          subject: task.subject,
-          priority: task.priority,
-        }}
-        onSubmit={(title, subject, priority) => {
-          updateTask(task.id, { title, subject, priority });
-          router.back();
-        }}
+        initialTitle={task.title}
+        initialSubject={task.subject}
+        initialPriority={task.priority}
+        submitLabel="Сохранить"
+        onSubmit={handleSubmit}
       />
-    </View>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f2f5' },
-  darkBg: { backgroundColor: '#121212' },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f2f5',
-  },
-  notFound: { fontSize: 16, color: '#212121' },
-  lightText: { color: '#ffffff' },
-});
