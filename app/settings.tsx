@@ -33,7 +33,7 @@ export default function SettingsScreen() {
             </Text>
             {active ? (
               <Text style={{ color: colors.primary, fontWeight: '700' }}>
-                ✓
+                
               </Text>
             ) : null}
           </TouchableOpacity>
