@@ -1,14 +1,24 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  FadeInDown,
+  FadeOutUp,
+  Layout,
+} from 'react-native-reanimated';
 import { router } from 'expo-router';
 import Screen from '../src/components/ui/Screen';
 import AppButton from '../src/components/ui/AppButton';
 import AppInput from '../src/components/ui/AppInput';
 import EmptyState from '../src/components/ui/EmptyState';
+import ProgressBar from '../src/components/ui/ProgressBar';
 import TaskCard from '../src/components/task/TaskCard';
 import { useTasks } from '../src/hooks/useTasks';
 import { useTheme } from '../src/hooks/useTheme';
-import { filterTasks, getTaskStats, sortByPriority } from '../src/utils/task';
+import {
+  filterTasks,
+  getTaskStats,
+  sortByPriority,
+} from '../src/utils/task';
 import { spacing } from '../src/theme/spacing';
 
 export default function IndexScreen() {
@@ -22,6 +32,25 @@ export default function IndexScreen() {
     [tasks, query]
   );
 
+  // Определяем id только что созданной задачи для анимации появления
+  const prevIdsRef = useRef<Set<string> | null>(null);
+  const newestIdRef = useRef<string | null>(null);
+
+  const currentIds = new Set(tasks.map((t) => t.id));
+
+  if (prevIdsRef.current === null) {
+    // Первый рендер — запоминаем стартовое состояние
+    prevIdsRef.current = currentIds;
+  } else {
+    for (const id of currentIds) {
+      if (!prevIdsRef.current.has(id)) {
+        newestIdRef.current = id;
+        break;
+      }
+    }
+    prevIdsRef.current = currentIds;
+  }
+
   return (
     <Screen padded>
       <View style={styles.header}>
@@ -29,6 +58,8 @@ export default function IndexScreen() {
           Всего: {stats.total} · Активных: {stats.active} · Выполнено:{' '}
           {stats.completed}
         </Text>
+
+        <ProgressBar completed={stats.completed} total={stats.total} />
 
         <View style={styles.headerButtons}>
           <AppButton
@@ -57,14 +88,21 @@ export default function IndexScreen() {
         data={visible}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TaskCard
-            task={item}
-            onPress={(id) =>
-              router.push({ pathname: '/task/[id]', params: { id } })
-            }
-            onToggle={toggleTaskStatus}
-            onDelete={removeTask}
-          />
+          <Animated.View
+            entering={FadeInDown.duration(300)}
+            exiting={FadeOutUp.duration(200)}
+            layout={Layout.springify().damping(14)}
+          >
+            <TaskCard
+              task={item}
+              isNew={item.id === newestIdRef.current}
+              onPress={(id) =>
+                router.push({ pathname: '/task/[id]', params: { id } })
+              }
+              onToggle={toggleTaskStatus}
+              onDelete={removeTask}
+            />
+          </Animated.View>
         )}
         ListEmptyComponent={
           query.trim() ? (

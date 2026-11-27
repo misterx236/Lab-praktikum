@@ -62,7 +62,14 @@ export default function AppButton({
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
-        <Text style={[styles.text, { color: textColor }]}>{title}</Text>
+        <Text
+  style={[styles.text, { color: textColor }]}
+  numberOfLines={1}
+  adjustsFontSizeToFit
+  minimumFontScale={0.85}
+>
+  {title}
+</Text>
       )}
     </TouchableOpacity>
   );
