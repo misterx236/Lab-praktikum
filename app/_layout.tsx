@@ -1,5 +1,6 @@
 import React from 'react';
 import { Stack } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from '../src/context/ThemeContext';
 import { TasksProvider } from '../src/context/TasksContext';
 import { useTheme } from '../src/hooks/useTheme';
@@ -17,10 +18,7 @@ function InnerLayout() {
       <Stack.Screen name="index" options={{ title: 'Задачи' }} />
       <Stack.Screen name="task/new" options={{ title: 'Новая задача' }} />
       <Stack.Screen name="task/[id]" options={{ title: 'Детали задачи' }} />
-      <Stack.Screen
-        name="task/edit/[id]"
-        options={{ title: 'Редактирование' }}
-      />
+      <Stack.Screen name="task/edit/[id]" options={{ title: 'Редактирование' }} />
       <Stack.Screen name="settings" options={{ title: 'Настройки' }} />
     </Stack>
   );
@@ -28,10 +26,12 @@ function InnerLayout() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <TasksProvider>
-        <InnerLayout />
-      </TasksProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <TasksProvider>
+          <InnerLayout />
+        </TasksProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

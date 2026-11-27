@@ -32,14 +32,13 @@ export default function IndexScreen() {
     [tasks, query]
   );
 
-  // Определяем id только что созданной задачи для анимации появления
   const prevIdsRef = useRef<Set<string> | null>(null);
   const newestIdRef = useRef<string | null>(null);
 
   const currentIds = new Set(tasks.map((t) => t.id));
 
   if (prevIdsRef.current === null) {
-    // Первый рендер — запоминаем стартовое состояние
+   
     prevIdsRef.current = currentIds;
   } else {
     for (const id of currentIds) {

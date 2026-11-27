@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -8,6 +9,7 @@ import Animated, {
   withSequence,
   interpolate,
   interpolateColor,
+  runOnJS,
 } from 'react-native-reanimated';
 import { Task } from '../../types/task';
 import { useTheme } from '../../hooks/useTheme';
@@ -29,6 +31,10 @@ const priorityLabel: Record<Task['priority'], string> = {
   low: 'низкий',
 };
 
+// ── Порог и ограничение смещения (требование 2) ─────────────
+const SWIPE_ACTION_THRESHOLD = 100;
+const MAX_TRANSLATE = 160;
+
 export default function TaskCard({
   task,
   onPress,
@@ -40,9 +46,8 @@ export default function TaskCard({
   const completed = task.status === 'completed';
   const overdue = isOverdue(task);
 
-  // ── 1. Анимация статуса (withSpring) ──────────────────────
+  // ── 1. Анимация статуса (ЛР №4) ───────────────────────────
   const statusProgress = useSharedValue(completed ? 1 : 0);
-
   useEffect(() => {
     statusProgress.value = withSpring(completed ? 1 : 0, {
       damping: 14,
@@ -52,15 +57,11 @@ export default function TaskCard({
 
   const cardStyle = useAnimatedStyle(() => ({
     opacity: interpolate(statusProgress.value, [0, 1], [1, 0.65]),
-    transform: [
-      { scale: interpolate(statusProgress.value, [0, 1], [1, 0.98]) },
-    ],
+    transform: [{ scale: interpolate(statusProgress.value, [0, 1], [1, 0.98]) }],
   }));
 
   const statusIconStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: interpolate(statusProgress.value, [0, 1], [1, 1.4]) },
-    ],
+    transform: [{ scale: interpolate(statusProgress.value, [0, 1], [1, 1.4]) }],
     backgroundColor: interpolateColor(
       statusProgress.value,
       [0, 1],
@@ -68,7 +69,7 @@ export default function TaskCard({
     ),
   }));
 
-  // ── 2. Раскрытие карточки (withTiming) ────────────────────
+  // ── 2. Раскрытие (ЛР №4) ──────────────────────────────────
   const [expanded, setExpanded] = useState(false);
   const expandProgress = useSharedValue(0);
 
@@ -85,7 +86,7 @@ export default function TaskCard({
     overflow: 'hidden',
   }));
 
-  // ── Доп. задание: появление + подсветка (withSequence) ────
+  // ── Доп. задание ЛР №4: появление + подсветка ─────────────
   const enterProgress = useSharedValue(isNew ? 0 : 1);
   const highlight = useSharedValue(0);
 
@@ -99,9 +100,7 @@ export default function TaskCard({
   }, [isNew, enterProgress, highlight]);
 
   const newCardStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(enterProgress.value, [0, 1], [16, 0]) },
-    ],
+    transform: [{ translateY: interpolate(enterProgress.value, [0, 1], [16, 0]) }],
     borderColor: interpolateColor(
       highlight.value,
       [0, 1],
@@ -110,121 +109,208 @@ export default function TaskCard({
     borderWidth: interpolate(highlight.value, [0, 1], [1, 2]),
   }));
 
+  // ── 3. Свайп (ЛР №5) ──────────────────────────────────────
+  const translateX = useSharedValue(0);
+  const startX = useSharedValue(0);
+
+  const handleToggle = () => onToggle(task.id);
+
+  const requestDelete = () => {
+    Alert.alert(
+      'Удалить задачу?',
+      `«${task.title}» будет удалена безвозвратно.`,
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Удалить',
+          style: 'destructive',
+          onPress: () => onDelete(task.id),
+        },
+      ]
+    );
+  };
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-15, 15])          // игнорируем микро-сдвиги при тапе
+    .failOffsetY([-15, 15])            // вертикальный скролл списка не ломаем
+    .onStart(() => {
+      startX.value = translateX.value;
+    })
+    .onUpdate((event) => {
+      // ограничиваем смещение в обе стороны (требование 2)
+      const next = startX.value + event.translationX;
+      translateX.value = Math.max(-MAX_TRANSLATE, Math.min(MAX_TRANSLATE, next));
+    })
+    .onEnd(() => {
+      if (translateX.value > SWIPE_ACTION_THRESHOLD) {
+        // свайп вправо → toggle статуса
+        runOnJS(handleToggle)();
+      } else if (translateX.value < -SWIPE_ACTION_THRESHOLD) {
+        // свайп влево → подтверждение удаления
+        runOnJS(requestDelete)();
+      }
+      // возврат на место через withSpring (требование 5)
+      translateX.value = withSpring(0, { damping: 16, stiffness: 180 });
+    });
+
+  // Стиль для самой карточки со смещением
+  const swipeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  // Фоновая область «Выполнить» (свайп вправо)
+  const doneBgStyle = useAnimatedStyle(() => {
+    const progress = interpolate(
+      translateX.value,
+      [0, SWIPE_ACTION_THRESHOLD],
+      [0, 1],
+      'clamp'
+    );
+    return {
+      opacity: progress,
+      backgroundColor: colors.success,
+    };
+  });
+
+  // Фоновая область «Удалить» (свайп влево)
+  const deleteBgStyle = useAnimatedStyle(() => {
+    const progress = interpolate(
+      translateX.value,
+      [-SWIPE_ACTION_THRESHOLD, 0],
+      [1, 0],
+      'clamp'
+    );
+    return {
+      opacity: progress,
+      backgroundColor: colors.danger,
+    };
+  });
+
   return (
-    <Animated.View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card },
-        cardStyle,
-        newCardStyle,
-      ]}
-    >
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => onPress(task.id)}
-        style={styles.header}
-      >
-        <Animated.View style={[styles.statusIcon, statusIconStyle]} />
-
-        <View style={styles.info}>
-          <Text
-            style={[
-              styles.title,
-              { color: colors.text },
-              completed && styles.titleCompleted,
-            ]}
-          >
-            {task.title}
-          </Text>
-          <Text style={[styles.subject, { color: colors.secondaryText }]}>
-            {task.subject}
-          </Text>
-          <Text style={[styles.priority, { color: colors.secondaryText }]}>
-            Приоритет: {priorityLabel[task.priority]}
-            {overdue ? ' · просрочена' : ''}
-          </Text>
-        </View>
-      </TouchableOpacity>
-
-      <Animated.View style={detailsStyle}>
-        <View style={[styles.details, { borderTopColor: colors.border }]}>
-          <Text style={[styles.detailRow, { color: colors.secondaryText }]}>
-            Предмет: {task.subject}
-          </Text>
-          <Text style={[styles.detailRow, { color: colors.secondaryText }]}>
-            Создана: {new Date(task.createdAt).toLocaleString()}
-          </Text>
-          {task.dueDate ? (
-            <Text
-              style={[
-                styles.detailRow,
-                { color: overdue ? colors.danger : colors.secondaryText },
-              ]}
-            >
-              Дедлайн: {new Date(task.dueDate).toLocaleString()}
-              {overdue ? ' (просрочена)' : ''}
-            </Text>
-          ) : null}
-        </View>
+    <View style={styles.swipeContainer}>
+      {/* Фоновые действия под карточкой */}
+      <Animated.View style={[styles.bgAction, styles.bgLeft, doneBgStyle]}>
+        <Text style={styles.bgText}>✓ Выполнить</Text>
+      </Animated.View>
+      <Animated.View style={[styles.bgAction, styles.bgRight, deleteBgStyle]}>
+        <Text style={styles.bgText}>Удалить 🗑</Text>
       </Animated.View>
 
-      <View style={styles.actions}>
-        <AppButton
-          title={expanded ? 'Свернуть' : 'Подробнее'}
-          variant="secondary"
-          onPress={toggleExpanded}
-          style={styles.actionButton}
-        />
-        <AppButton
-          title={completed ? 'Вернуть' : 'Готово'}
-          variant={completed ? 'secondary' : 'primary'}
-          onPress={() => onToggle(task.id)}
-          style={styles.actionButton}
-        />
-        <AppButton
-          title="Удалить"
-          variant="danger"
-          onPress={() => onDelete(task.id)}
-          style={styles.actionButton}
-        />
-      </View>
-    </Animated.View>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={[
+            styles.card,
+            { backgroundColor: colors.card },
+            cardStyle,
+            newCardStyle,
+            swipeStyle,
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => onPress(task.id)}
+            style={styles.header}
+          >
+            <Animated.View style={[styles.statusIcon, statusIconStyle]} />
+            <View style={styles.info}>
+              <Text
+                style={[
+                  styles.title,
+                  { color: colors.text },
+                  completed && styles.titleCompleted,
+                ]}
+              >
+                {task.title}
+              </Text>
+              <Text style={[styles.subject, { color: colors.secondaryText }]}>
+                {task.subject}
+              </Text>
+              <Text style={[styles.priority, { color: colors.secondaryText }]}>
+                Приоритет: {priorityLabel[task.priority]}
+                {overdue ? ' · просрочена' : ''}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <Animated.View style={detailsStyle}>
+            <View style={[styles.details, { borderTopColor: colors.border }]}>
+              <Text style={[styles.detailRow, { color: colors.secondaryText }]}>
+                Предмет: {task.subject}
+              </Text>
+              <Text style={[styles.detailRow, { color: colors.secondaryText }]}>
+                Создана: {new Date(task.createdAt).toLocaleString()}
+              </Text>
+              {task.dueDate ? (
+                <Text
+                  style={[
+                    styles.detailRow,
+                    { color: overdue ? colors.danger : colors.secondaryText },
+                  ]}
+                >
+                  Дедлайн: {new Date(task.dueDate).toLocaleString()}
+                  {overdue ? ' (просрочена)' : ''}
+                </Text>
+              ) : null}
+            </View>
+          </Animated.View>
+
+          <View style={styles.actions}>
+            <AppButton
+              title={expanded ? 'Свернуть' : 'Подробнее'}
+              variant="secondary"
+              onPress={toggleExpanded}
+              style={styles.actionButton}
+            />
+            <AppButton
+              title={completed ? 'Вернуть' : 'Готово'}
+              variant={completed ? 'secondary' : 'primary'}
+              onPress={() => onToggle(task.id)}
+              style={styles.actionButton}
+            />
+            <AppButton
+              title="Удалить"
+              variant="danger"
+              onPress={() => onDelete(task.id)}
+              style={styles.actionButton}
+            />
+          </View>
+        </Animated.View>
+      </GestureDetector>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  swipeContainer: {
+    marginBottom: spacing.sm + 4,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  bgAction: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: '100%',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  bgLeft: { alignItems: 'flex-start' },
+  bgRight: { alignItems: 'flex-end' },
+  bgText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   card: {
     borderRadius: radius.md,
     padding: spacing.md,
-    marginBottom: spacing.sm + 4,
     borderWidth: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
-  statusIcon: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    marginTop: 4,
-  },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  statusIcon: { width: 14, height: 14, borderRadius: 7, marginTop: 4 },
   info: { flex: 1 },
   title: { fontSize: 17, fontWeight: '600', marginBottom: spacing.xs },
   titleCompleted: { textDecorationLine: 'line-through', color: '#888' },
   subject: { fontSize: 14, marginBottom: 2 },
   priority: { fontSize: 13 },
-  details: {
-    borderTopWidth: 1,
-    paddingTop: spacing.sm,
-    marginTop: spacing.sm,
-  },
+  details: { borderTopWidth: 1, paddingTop: spacing.sm, marginTop: spacing.sm },
   detailRow: { fontSize: 13, marginBottom: 2 },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm + 4,
-  },
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm + 4 },
   actionButton: { flex: 1 },
 });

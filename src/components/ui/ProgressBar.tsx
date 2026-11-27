@@ -17,7 +17,7 @@ interface ProgressBarProps {
 export default function ProgressBar({ completed, total }: ProgressBarProps) {
   const { colors } = useTheme();
 
-  // Доля от 0 до 1, ограниченная диапазоном (требование ЛР №4)
+
   const ratio =
     total > 0 ? Math.min(Math.max(completed / total, 0), 1) : 0;
 
